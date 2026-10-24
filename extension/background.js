@@ -296,7 +296,12 @@ chrome.webNavigation.onCommitted.addListener(async d => {
 
 // ---------- messages ----------
 
+// A page can fire the guard's report event itself; cap notices per tab so it can't spam them or the counter.
+const recentReports = new Map() // tabId -> timestamps
 async function blocked(tabId, kind, url, canContinue) {
+  const now = Date.now(), times = (recentReports.get(tabId) ?? []).filter(t => now - t < 10000)
+  if (times.length >= 5) return
+  times.push(now); recentReports.set(tabId, times)
   bump({ lifetimeRedirects: 1 })
   const key = `n${tabId}`
   const n = ((await chrome.storage.session.get(key))[key] ?? 0) + 1

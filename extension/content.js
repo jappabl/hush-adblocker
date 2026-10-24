@@ -15,6 +15,7 @@
     if (msg.type !== 'popupCheck') return
     const id = Math.random().toString(36).slice(2)
     const done = ok => { removeEventListener('__hush_answer', onAnswer); clearTimeout(timer); reply(ok) }
+    // The guard answers synchronously, before any page listener can; the first answer wins.
     const onAnswer = e => { const [rid, ok] = String(e.detail).split(' '); if (rid === id) done(ok === '1') }
     const timer = setTimeout(() => done(true), 500)
     addEventListener('__hush_answer', onAnswer)

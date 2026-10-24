@@ -85,6 +85,10 @@
   const nativeOpen = W.open
   const nativeDispatch = EventTarget.prototype.dispatchEvent
   const nativeSetTimeout = W.setTimeout.bind(W)
+  // Talks to content.js with the browser's own originals, so a page that replaces dispatchEvent or
+  // CustomEvent later can't intercept or rewrite what the guard says.
+  const NativeCustomEvent = W.CustomEvent
+  const tell = (type, detail) => nativeDispatch.call(W, new NativeCustomEvent(type, { detail }))
   const anchorOf = el => el?.closest?.('a[href],area[href]') ?? null
   const opensNewWindow = el => {
     const t = (el.target || document.querySelector('base[target]')?.target || '').toLowerCase()
@@ -447,7 +451,7 @@
     if (c && !c.blocked) { c.blocked = kind; if (c.done) resolve(c) }
     let abs = String(url)
     try { abs = new URL(url, location.href).href } catch {}
-    W.dispatchEvent(new CustomEvent('__hush_blocked', { detail: kind + ' ' + abs }))
+    tell('__hush_blocked', kind + ' ' + abs)
   }
 
   // ---- retry storms ----
@@ -499,7 +503,7 @@
   // ---- a popup opened blank is about to load `url`: does it fit what the user clicked? ----
   W.addEventListener('__hush_ask', e => {
     const s = String(e.detail), i = s.indexOf(' ')
-    W.dispatchEvent(new CustomEvent('__hush_answer', { detail: s.slice(0, i) + ' ' + (popupAllowed(s.slice(i + 1)) ? 1 : 0) }))
+    tell('__hush_answer', s.slice(0, i) + ' ' + (popupAllowed(s.slice(i + 1)) ? 1 : 0))
   })
 
   // ---- popups: window.open ----
