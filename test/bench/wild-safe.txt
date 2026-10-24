@@ -1,0 +1,13 @@
+# Real sites with real ad-network code that are fine to visit from a filtered network.
+https://canyoublockit.com/extreme-test/
+https://canyoublockit.com/advanced-adblocker-test/pop-under-ads/
+https://canyoublockit.com/advanced-adblocker-test/push-notification-ads/
+https://canyoublockit.com/testing/
+https://adsterra.com/ad-formats/popunder/
+https://hilltopads.com/advertisers/popunder
+https://www.evadav.com/
+https://a-ads.com/
+https://www.adcash.com/ad-formats/
+https://exoclick.com/ad-formats/
+https://www.galaksion.com/
+https://www.popads.net/

@@ -1,0 +1,7 @@
+node_modules/
+.cache/
+test/out/
+.bench/
+dist/
+extension/_metadata/
+.DS_Store

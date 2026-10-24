@@ -1,0 +1,8 @@
+# Sites that hijacked plain Chrome in the baseline runs (2026-10-23).
+https://loader.to/
+https://y2meta.app/
+https://www.limetorrents.lol/
+https://www.proxysite.com/
+https://canyoublockit.com/extreme-test/
+https://canyoublockit.com/advanced-adblocker-test/pop-under-ads/
+https://canyoublockit.com/testing/

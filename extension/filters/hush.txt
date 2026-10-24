@@ -1,0 +1,28 @@
+! Hush's own filters: ad servers and trackers the big lists leave out.
+! Only hosts whose blocking removes tracking/ads without breaking what a page is for.
+! Deliberately NOT here (blocking breaks pages): video delivery (googlevideo, jwpcdn, dai.google.com),
+! Facebook/Instagram login APIs, feature-flag services, consent managers, support-chat widgets.
+
+! Trackers and analytics
+||analytics.twitter.com^
+||snap.licdn.com^$third-party
+||udc.yahoo.com^
+||i.posthog.com^$third-party
+||eu.posthog.com^$third-party
+||us.posthog.com^$third-party
+||rudderstack.com^$third-party
+||cdn.dynamicyield.com^$third-party
+||prd.jwpltx.com^
+||xp.apple.com^$third-party
+||ngfts.lge.com^
+
+! Mobile attribution / deep-link tracking (subrequests only; links you click still open)
+||kochava.com^$third-party
+||bnc.lt^$third-party
+
+! Video ad server
+||fwmrm.net^
+
+! "Allow notifications?" prompts and marketing popups
+||onesignal.com^$third-party
+||klaviyo.com^$third-party

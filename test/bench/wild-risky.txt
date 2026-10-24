@@ -1,0 +1,48 @@
+# Sites notorious for click hijacking (popunders, redirects). Visit only from a test browser.
+# YouTube converters / video downloaders
+https://www.y2mate.com/
+https://y2mate.nu/
+https://ytmp3.cc/
+https://en.savefrom.net/
+https://ssyoutube.com/
+https://9convert.com/
+https://loader.to/
+https://yt1s.com/
+https://ytmp3.as/
+https://cnvmp3.com/
+https://y2meta.app/
+https://www.flvto.biz/
+# Torrent search
+https://1337x.to/
+https://thepiratebay.org/
+https://yts.mx/
+https://www.limetorrents.lol/
+https://torrentgalaxy.to/
+https://nyaa.si/
+# File hosts / image hosts
+https://www.mediafire.com/
+https://1fichier.com/
+https://rapidgator.net/
+https://katfile.com/
+https://nitroflare.com/
+https://filecrypt.cc/
+https://pixhost.to/
+https://imgbox.com/
+https://www.imagebam.com/
+https://imagetwist.com/
+# Link shorteners
+https://ouo.io/
+https://shrinkme.io/
+https://exe.io/
+https://linkvertise.com/
+https://cuty.io/
+# APK sites, proxies, subtitles, lyrics, fonts
+https://apkpure.com/
+https://an1.com/
+https://happymod.com/
+https://www.croxyproxy.com/
+https://www.proxysite.com/
+https://www.opensubtitles.org/
+https://www.addic7ed.com/
+https://www.azlyrics.com/
+https://www.1001freefonts.com/

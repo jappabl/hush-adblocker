@@ -1,0 +1,15 @@
+{
+  "name": "hush",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-filters.mjs",
+    "test": "node test/run.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.12.0"
+  },
+  "license": "GPL-3.0-or-later",
+  "description": "Ad, tracker and click-hijack blocker for Chrome and Brave"
+}

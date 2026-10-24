@@ -1,0 +1,79 @@
+{
+  "manifest_version": 3,
+  "name": "Hush",
+  "description": "Blocks ads, trackers, malware sites and unwanted redirects.",
+  "version": "1.7.0",
+  "minimum_chrome_version": "111",
+  "permissions": [
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "scripting",
+    "webNavigation",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "easylist",
+        "enabled": true,
+        "path": "rules/easylist.json"
+      },
+      {
+        "id": "easyprivacy",
+        "enabled": true,
+        "path": "rules/easyprivacy.json"
+      },
+      {
+        "id": "ubo",
+        "enabled": true,
+        "path": "rules/ubo.json"
+      },
+      {
+        "id": "pgl",
+        "enabled": true,
+        "path": "rules/pgl.json"
+      },
+      {
+        "id": "hagezi",
+        "enabled": true,
+        "path": "rules/hagezi.json"
+      },
+      {
+        "id": "hush",
+        "enabled": true,
+        "path": "rules/hush.json"
+      },
+      {
+        "id": "badware",
+        "enabled": true,
+        "path": "rules/badware.json"
+      },
+      {
+        "id": "urlhaus",
+        "enabled": true,
+        "path": "rules/urlhaus.json"
+      }
+    ]
+  }
+}
