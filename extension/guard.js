@@ -501,10 +501,12 @@
   disguise(XHR.send, nativeXhrSend)
 
   // ---- a popup opened blank is about to load `url`: does it fit what the user clicked? ----
-  W.addEventListener('__hush_ask', e => {
+  // Capture phase, registered before any page script: at the window, capture listeners run before
+  // all others, so a page can't answer first or stop the guard from answering.
+  nativeAdd.call(W, '__hush_ask', e => {
     const s = String(e.detail), i = s.indexOf(' ')
     tell('__hush_answer', s.slice(0, i) + ' ' + (popupAllowed(s.slice(i + 1)) ? 1 : 0))
-  })
+  }, true)
 
   // ---- popups: window.open ----
   // A blank popup from a button only really opens once it's clear what it's for: written into

@@ -16,8 +16,9 @@
     const id = Math.random().toString(36).slice(2)
     const done = ok => { removeEventListener('__hush_answer', onAnswer); clearTimeout(timer); reply(ok) }
     // The guard answers synchronously, before any page listener can; the first answer wins.
+    // No answer means something interfered: deny.
     const onAnswer = e => { const [rid, ok] = String(e.detail).split(' '); if (rid === id) done(ok === '1') }
-    const timer = setTimeout(() => done(true), 500)
+    const timer = setTimeout(() => done(false), 500)
     addEventListener('__hush_answer', onAnswer)
     dispatchEvent(new CustomEvent('__hush_ask', { detail: id + ' ' + msg.url }))
     return true
