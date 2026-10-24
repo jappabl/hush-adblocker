@@ -1,0 +1,3 @@
+# Compiled from filter lists by scripts/build-filters.mjs; not hand-written.
+extension/rules/** linguist-generated
+extension/data/** linguist-generated
