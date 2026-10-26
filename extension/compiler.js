@@ -4,6 +4,7 @@
 // Loaded as a plain script; exposes globalThis.HushCompiler = { LISTS, compile }.
 (() => {
 // blockDocuments: rules without a type option also block whole pages (malware lists).
+// bareHosts: the list is one bare domain/IP per line (hosts style).
 const LISTS = [
   { id: 'easylist', file: 'easylist.txt', url: 'https://easylist.to/easylist/easylist.txt' },
   { id: 'easyprivacy', file: 'easyprivacy.txt', url: 'https://easylist.to/easylist/easyprivacy.txt' },
@@ -16,7 +17,7 @@ const LISTS = [
   { id: 'badware', file: 'ubo-badware.txt', url: 'https://ublockorigin.github.io/uAssets/filters/badware.txt', blockDocuments: true },
   // Domains-only edition: the full list adds ~34k single-file URLs (mostly malware payloads on GitHub),
   // one rule each, which would not fit Chrome's rule limits.
-  { id: 'urlhaus', file: 'urlhaus-domains.txt', url: 'https://malware-filter.gitlab.io/urlhaus-filter/urlhaus-filter-domains-online.txt', blockDocuments: true },
+  { id: 'urlhaus', file: 'urlhaus-domains.txt', url: 'https://malware-filter.gitlab.io/urlhaus-filter/urlhaus-filter-domains-online.txt', blockDocuments: true, bareHosts: true },
 ]
 
 const ALL_TYPES = ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object',
@@ -216,8 +217,9 @@ function compile(lists, texts) {
         continue
       }
 
-      // hosts-style bare domains / IPs (urlhaus)
-      if (/^[a-z0-9.-]+\.[a-z0-9-]+$/i.test(line) || /^\d+\.\d+\.\d+\.\d+$/.test(line)) line = `||${line.toLowerCase()}^`
+      // Hosts-style lists (one bare domain/IP per line). Only for lists marked so: in Adblock syntax a
+      // bare `-didomi.js` or `.gatracking.js` is a file-name filter, not a site.
+      if (list.bareHosts && (/^[a-z0-9.-]+\.[a-z0-9-]+$/i.test(line) || /^\d+\.\d+\.\d+\.\d+$/.test(line))) line = `||${line.toLowerCase()}^`
 
       const f = parseNetwork(line)
       if (!f) { skipped++; continue }

@@ -47,8 +47,11 @@ chrome.runtime.onInstalled.addListener(async () => {
   await apply()
   chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: UPDATE_EVERY_H * 60 })
   chrome.alarms.create(TALLY_ALARM, { periodInMinutes: 2 })
-  const { lifetimeSince } = await chrome.storage.local.get('lifetimeSince')
-  if (!lifetimeSince) await chrome.storage.local.set({ lifetimeSince: Date.now(), tallyFrom: Date.now() })
+  // countVersion 2 (1.7.3): repeat pings capped per page. Totals counted the old way start over.
+  const { lifetimeSince, countVersion } = await chrome.storage.local.get(['lifetimeSince', 'countVersion'])
+  if (!lifetimeSince || countVersion !== 2) {
+    await chrome.storage.local.set({ lifetimeSince: Date.now(), tallyFrom: Date.now(), lifetimeAds: 0, lifetimeRedirects: 0, countVersion: 2 })
+  }
 })
 
 chrome.runtime.onStartup.addListener(async () => {
@@ -72,6 +75,23 @@ const bump = updates => (tallyChain = tallyChain.then(async () => {
 
 const notPauseRule = i => !(i.rule.ruleId === PAUSE_RULE_ID && i.rule.rulesetId === chrome.declarativeNetRequest.DYNAMIC_RULESET_ID)
 
+// Pages keep pinging blocked trackers (YouTube's player: ~2 a second while playing), which would
+// make the totals mostly a measure of how long a tab stayed open. Each rule counts at most
+// PER_PAGE_CAP times per page. `seen` (session storage) holds the counts: tabId -> { navAt, rules }.
+const PER_PAGE_CAP = 25
+function countCapped(records, seen, navAtOf) {
+  let n = 0
+  for (const i of records) {
+    const navAt = navAtOf(i.tabId)
+    const page = i.timeStamp >= navAt ? navAt : -1 // -1: an earlier page in this tab
+    let s = seen[i.tabId]
+    if (!s || s.navAt !== page) s = seen[i.tabId] = { navAt: page, rules: {} }
+    const key = `${i.rule.rulesetId}#${i.rule.ruleId}`
+    if ((s.rules[key] = (s.rules[key] ?? 0) + 1) <= PER_PAGE_CAP) n++
+  }
+  return n
+}
+
 // Adds requests blocked since the last tally to the lifetime total. `fetched`: a getMatchedRules
 // result the caller already has that covers that period (the popup's), saving a lookup.
 // Runs one at a time, in turn with bump(), so nothing is counted twice.
@@ -81,7 +101,11 @@ const tally = (fetched, since = Infinity) => (tallyChain = tallyChain.then(async
   const m = fetched && since <= tallyFrom ? fetched
     : await chrome.declarativeNetRequest.getMatchedRules({ minTimeStamp: tallyFrom }).catch(() => null)
   if (!m) return // over the lookup quota: the next run picks these up
-  const n = m.rulesMatchedInfo.filter(i => i.timeStamp >= tallyFrom && i.timeStamp < now && notPauseRule(i)).length
+  const fresh = m.rulesMatchedInfo.filter(i => i.timeStamp >= tallyFrom && i.timeStamp < now && notPauseRule(i))
+  const session = await chrome.storage.session.get(null)
+  const seen = session.seen ?? {}
+  const n = countCapped(fresh, seen, tabId => session[`nav${tabId}`] ?? 0)
+  await chrome.storage.session.set({ seen })
   await chrome.storage.local.set({ tallyFrom: now, lifetimeAds: lifetimeAds + n })
 }).catch(() => {}))
 
@@ -258,6 +282,7 @@ chrome.webNavigation.onErrorOccurred.addListener(d => {
 })
 
 chrome.tabs.onRemoved.addListener(tabId => {
+  chrome.storage.session.get('seen').then(({ seen }) => { if (seen?.[tabId]) { delete seen[tabId]; chrome.storage.session.set({ seen }) } })
   opened.delete(tabId)
   pageReports.delete(tabId)
   chrome.storage.session.remove(`n${tabId}`)
@@ -355,7 +380,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
           site,
           ads: !pausedAds.includes(site),
           guard: !pausedGuard.includes(site),
-          adsBlocked: m ? m.rulesMatchedInfo.filter(i => i.tabId === msg.tabId && i.timeStamp >= navAt && notPauseRule(i)).length : 0,
+          adsBlocked: m ? countCapped(m.rulesMatchedInfo.filter(i => i.tabId === msg.tabId && i.timeStamp >= navAt && notPauseRule(i)), {}, () => navAt) : 0,
           listsCheckedAt: (await chrome.storage.local.get('listsCheckedAt')).listsCheckedAt ?? null,
           lifetime: await chrome.storage.local.get(['lifetimeAds', 'lifetimeRedirects']).then(l => (l.lifetimeAds ?? 0) + (l.lifetimeRedirects ?? 0)),
           redirectsBlocked: (await chrome.storage.session.get(key))[key] ?? 0,
