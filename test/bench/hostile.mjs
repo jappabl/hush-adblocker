@@ -22,7 +22,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
 // actions: button = click the real button; blank = click empty space; link = click the real
 // same-site link; wait = do nothing for 5 s; type = click a text box and type.
 const S = []
-const hijack = (id, desc, actions, script, extraHtml = '') => S.push({ id, desc, actions, script, extraHtml, kind: 'hijack' })
+const hijack = (id, desc, actions, script, extraHtml = '', host = 'news-site.test') => S.push({ id, desc, actions, script, extraHtml, host, kind: 'hijack' })
 const legit = (id, desc, actions, script, extraHtml = '', query = '', host = 'news-site.test') => S.push({ id, desc, actions, script, extraHtml, query, host, kind: 'legit' })
 
 hijack('popup-on-click', 'any click opens an ad tab', ['blank', 'button'],
@@ -148,6 +148,11 @@ hijack('document-open-popup', 'popup through document.open(url, name, features)'
   `document.addEventListener('click', () => document.open(AD, '_blank', ''))`)
 hijack('blank-popup-then-ad', 'real button opens a blank popup, then sends it to an ad', ['button'],
   `document.getElementById('real').addEventListener('click', () => { const w = open(''); setTimeout(() => { w.location.href = AD }, 400) })`)
+
+hijack('hijack-on-firebase-hosting', 'click-anywhere pop-up and redirect on a page hosted on Firebase (anyone can publish there)', ['blank', 'button'],
+  `document.addEventListener('click', e => { open(AD); if (!e.target.closest('button')) location.href = AD })`, '', 'deals-4u-77.firebaseapp.com')
+hijack('popup-to-tenant-site', 'click-anywhere pop-up to a page someone published on web.app', ['blank', 'button'],
+  `document.addEventListener('click', () => open('http://free-prize-claim.web.app:${PORT}/claim'))`)
 
 legit('legit-newtab-link', 'normal target=_blank link to another site', ['expect-popup:#ext'], '',
   `<a id="ext" target="_blank" href="http://other-site.test:${PORT}/article">Other site</a>`)

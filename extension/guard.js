@@ -47,16 +47,31 @@
   const docUrl = url => { try { const u = new URL(url, location.href); return u.origin + u.pathname + u.search } catch { return '' } }
   const isThisPage = url => docUrl(url) === docUrl(location.href)
 
-  // Sign-in, payment and share providers. Popups to them are allowed from any button click, and
-  // on their own pages the click-anywhere rules don't apply: they run sign-in/checkout flows that
-  // send you back to the site you came from, often from a page-wide click handler.
+  // Big first-party platforms where nobody else can run script on their pages. They don't hijack
+  // clicks, and their sign-in/checkout machinery (page-wide click handlers, popups, redirects back)
+  // is what the guard could interfere with, so on these the guard steps aside entirely.
+  // Never put multi-tenant hosting here (anyone can publish pages on x.firebaseapp.com).
+  const NO_HIJACK = new Set(['google.com', 'youtube.com', 'apple.com', 'icloud.com', 'microsoft.com',
+    'microsoftonline.com', 'live.com', 'office.com', 'outlook.com', 'microsoft365.com', 'facebook.com',
+    'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'github.com', 'amazon.com', 'paypal.com',
+    'stripe.com', 'klarna.com', 'affirm.com', 'afterpay.com', 'discord.com', 'yahoo.com'])
+
+  // Sign-in, payment and share providers as destinations: popups to them are allowed from any
+  // button click. Some give every customer a subdomain; those only count on their sign-in paths.
+  const TENANT_PATHS = { 'firebaseapp.com': /^\/__\/auth\//, 'web.app': /^\/__\/auth\// }
+  const trustedDest = url => {
+    try {
+      const u = new URL(url, location.href), site = siteOf(u.hostname)
+      return TRUSTED.has(site) && (!TENANT_PATHS[site] || TENANT_PATHS[site].test(u.pathname))
+    } catch { return false }
+  }
   const TRUSTED = new Set([
     // sign-in
     'google.com', 'youtube.com', 'apple.com', 'icloud.com', 'microsoft.com', 'microsoftonline.com', 'live.com',
     'office.com', 'outlook.com', 'microsoft365.com', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com',
     'linkedin.com', 'github.com', 'gitlab.com', 'amazon.com', 'discord.com', 'yahoo.com', 'line.me', 'vk.com',
     'okta.com', 'auth0.com', 'onelogin.com', 'duosecurity.com', 'pingidentity.com', 'amazoncognito.com',
-    'firebaseapp.com', 'login.gov', 'id.me', 'accounts.dev', 'workos.com', 'stytch.com',
+    'firebaseapp.com', 'web.app', 'login.gov', 'id.me', 'accounts.dev', 'workos.com', 'stytch.com',
     // payments
     'paypal.com', 'stripe.com', 'klarna.com', 'affirm.com', 'afterpay.com', 'clearpay.co.uk', 'zip.co', 'sezzle.com',
     'venmo.com', 'cash.app', 'shop.app', 'shopify.com', 'squareup.com', 'adyen.com', 'braintreegateway.com',
@@ -82,13 +97,16 @@
   const NativeCustomEvent = W.CustomEvent
   const tell = (type, detail) => nativeDispatch.call(W, new NativeCustomEvent(type, { detail }))
 
-  // Sign-in, payment and big-platform sites (and their frames embedded elsewhere, like Google's
-  // sign-in prompt) don't hijack clicks: leave their pages completely untouched. Only answer the
-  // background's blank-popup check, with "allow" (an unanswered check counts as deny).
-  if (TRUSTED.has(here())) {
-    EventTarget.prototype.addEventListener.call(W, '__hush_ask', e => {
+  // On those platforms (and in their frames embedded elsewhere, like Google's sign-in prompt) the
+  // guard steps aside. It only answers the background's blank-popup check: allowed if the user
+  // clicked or pressed a key in the last 5 s (an unanswered check counts as deny).
+  if (NO_HIJACK.has(here())) {
+    let pressedAt = -Infinity
+    const add = EventTarget.prototype.addEventListener
+    for (const type of ['pointerdown', 'keydown', 'touchstart']) add.call(W, type, e => { if (e.isTrusted) pressedAt = performance.now() }, true)
+    add.call(W, '__hush_ask', e => {
       const s = String(e.detail)
-      tell('__hush_answer', s.slice(0, s.indexOf(' ')) + ' 1')
+      tell('__hush_answer', s.slice(0, s.indexOf(' ')) + ' ' + (performance.now() - pressedAt < 5000 ? 1 : 0))
     }, true)
     return
   }
@@ -231,7 +249,7 @@
     if (url === '' || url == null) url = 'about:blank' // window.open('') opens a blank window
     const raw = url, target = unwrap(url), dest = siteOfUrl(target)
     const el = recent(5000)
-    if (el && (TRUSTED.has(here()) || announced(target))) return true
+    if (el && announced(target)) return true
     const link = el && linkUnder(el)
     if (dest && isThisPage(target)) return !!link && isThisPage(link.href) // tab-under: a copy of this page
     if (!el) return false
@@ -239,15 +257,15 @@
     const control = el.closest(CONTROL)
     if (!control) return false // clicking blank space never opens anything
     if (namesDestination(control, raw)) return true
-    if (catchAll) return target === raw && TRUSTED.has(dest) // a click-anywhere script
+    if (catchAll) return target === raw && trustedDest(target) // a click-anywhere script
     if (dest === null || dest === here()) return true // e.g. a print view or about:blank from a button
-    return target === raw && TRUSTED.has(dest)
+    return target === raw && trustedDest(target)
   }
 
   function navigationAllowed(url, userInitiated) {
     const raw = url, dest = siteOfUrl(unwrap(url))
     if (!dest || dest === here()) return true
-    if (TRUSTED.has(here()) || announced(raw)) return true // sign-in / checkout flows sending you back
+    if (announced(raw)) return true // sign-in / checkout flows sending you back
     if (userInitiated) {
       // A real link click, unless the link was re-pointed elsewhere after the press began.
       const pressed = last?.href && performance.now() - last.t < 2000 ? last.href : null
