@@ -17,14 +17,6 @@
   'use strict'
   const W = window
 
-  // Wrapped functions report the original's source code, so pages checking for "native code"
-  // (anti-adblock scripts, YouTube) see nothing unusual.
-  const originals = new WeakMap()
-  const nativeToString = Function.prototype.toString
-  const toString = function toString() { return nativeToString.call(originals.get(this) ?? this) }
-  originals.set(toString, nativeToString)
-  Function.prototype.toString = toString
-  const disguise = (fake, real) => { originals.set(fake, real); return fake }
 
   const SECOND_LEVEL = new Set(['co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'or', 'ne', 'go', 'gob', 'mil', 'nic', 'ltd', 'plc', 'sch'])
   const siteOf = host => {
@@ -89,6 +81,26 @@
   // CustomEvent later can't intercept or rewrite what the guard says.
   const NativeCustomEvent = W.CustomEvent
   const tell = (type, detail) => nativeDispatch.call(W, new NativeCustomEvent(type, { detail }))
+
+  // Sign-in, payment and big-platform sites (and their frames embedded elsewhere, like Google's
+  // sign-in prompt) don't hijack clicks: leave their pages completely untouched. Only answer the
+  // background's blank-popup check, with "allow" (an unanswered check counts as deny).
+  if (TRUSTED.has(here())) {
+    EventTarget.prototype.addEventListener.call(W, '__hush_ask', e => {
+      const s = String(e.detail)
+      tell('__hush_answer', s.slice(0, s.indexOf(' ')) + ' 1')
+    }, true)
+    return
+  }
+
+  // Wrapped functions report the original's source code, so pages checking for "native code"
+  // (anti-adblock scripts, YouTube) see nothing unusual.
+  const originals = new WeakMap()
+  const nativeToString = Function.prototype.toString
+  const toString = function toString() { return nativeToString.call(originals.get(this) ?? this) }
+  originals.set(toString, nativeToString)
+  Function.prototype.toString = toString
+  const disguise = (fake, real) => { originals.set(fake, real); return fake }
   const anchorOf = el => el?.closest?.('a[href],area[href]') ?? null
   const opensNewWindow = el => {
     const t = (el.target || document.querySelector('base[target]')?.target || '').toLowerCase()
