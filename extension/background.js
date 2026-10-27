@@ -40,17 +40,18 @@ async function apply() {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
-  chrome.declarativeNetRequest.setExtensionActionOptions({ displayActionCountAsBadgeText: true })
+  // The badge shows Hush's own per-page count (below), not Chrome's raw count of every blocked request.
+  chrome.declarativeNetRequest.setExtensionActionOptions({ displayActionCountAsBadgeText: false })
   chrome.action.setBadgeBackgroundColor({ color: '#5f6368' })
   // A new version ships fresher packaged lists; start from those, then fetch.
   await useBundledLists()
   await apply()
   chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: UPDATE_EVERY_H * 60 })
-  chrome.alarms.create(TALLY_ALARM, { periodInMinutes: 2 })
-  // countVersion 2 (1.7.3): repeat pings capped per page. Totals counted the old way start over.
+  chrome.alarms.clear('tally') // the old 2-minute tally (1.7.0–1.7.5)
+  // countVersion 3 (1.7.6): each blocked address counts once per page. Older totals start over.
   const { lifetimeSince, countVersion } = await chrome.storage.local.get(['lifetimeSince', 'countVersion'])
-  if (!lifetimeSince || countVersion !== 2) {
-    await chrome.storage.local.set({ lifetimeSince: Date.now(), tallyFrom: Date.now(), lifetimeAds: 0, lifetimeRedirects: 0, countVersion: 2 })
+  if (!lifetimeSince || countVersion !== 3) {
+    await chrome.storage.local.set({ lifetimeSince: Date.now(), lifetimeAds: 0, lifetimeRedirects: 0, countVersion: 3 })
   }
 })
 
@@ -58,55 +59,55 @@ chrome.runtime.onStartup.addListener(async () => {
   if (!(await chrome.alarms.get(UPDATE_ALARM))) {
     chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: UPDATE_EVERY_H * 60 })
   }
-  if (!(await chrome.alarms.get(TALLY_ALARM))) chrome.alarms.create(TALLY_ALARM, { periodInMinutes: 2 })
 })
 
-// ---------- lifetime totals ----------
-// Chrome keeps a record of each blocked request for a few minutes (across navigations and closed
-// tabs) and allows 20 lookups per 10 minutes; adding up new records every 2 minutes stays well
-// inside both. Redirects and popups are counted as they're blocked.
-const TALLY_ALARM = 'tally'
+// ---------- counting ----------
+// Every request blocked in a tab shows up here as it happens (webRequest can still observe in
+// Manifest V3, just not block). A page counts each blocked address (origin + path) once, so a
+// player pinging the same tracker every second doesn't run the numbers up. The toolbar badge,
+// "blocked on this page" and the lifetime total all come from this. Redirects and popups are
+// counted as they're blocked.
+const pages = new Map() // tabId -> { navAt, keys: Set(origin + path) }
+let pagesLoaded = null
+const loadPages = () => (pagesLoaded ??= chrome.storage.session.get('pages').then(({ pages: saved = {} }) => {
+  for (const [t, p] of Object.entries(saved)) if (!pages.has(+t)) pages.set(+t, { navAt: p.navAt, keys: new Set(p.keys) })
+}))
+let saveTimer = 0, pendingAds = 0
+const saveSoon = () => {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    chrome.storage.session.set({ pages: Object.fromEntries([...pages].map(([t, p]) => [t, { navAt: p.navAt, keys: [...p.keys] }])) })
+    if (pendingAds) { bump({ lifetimeAds: pendingAds }); pendingAds = 0 }
+  }, 1000)
+}
+const showCount = (tabId, n) => chrome.action.setBadgeText({ tabId, text: n ? String(n) : '' }).catch(() => {})
+
+chrome.webRequest.onErrorOccurred.addListener(async d => {
+  if (d.error !== 'net::ERR_BLOCKED_BY_CLIENT' || d.tabId < 0) return
+  await loadPages()
+  let p = pages.get(d.tabId)
+  if (!p) pages.set(d.tabId, p = { navAt: 0, keys: new Set() })
+  let key
+  try { const u = new URL(d.url); key = u.origin + u.pathname } catch { key = d.url }
+  if (p.keys.has(key)) return
+  p.keys.add(key)
+  pendingAds++
+  showCount(d.tabId, p.keys.size)
+  saveSoon()
+}, { urls: ['<all_urls>'] })
+
+const newPage = async (tabId, navAt) => {
+  await loadPages()
+  pages.set(tabId, { navAt, keys: new Set() })
+  showCount(tabId, 0)
+  saveSoon()
+}
+
 let tallyChain = Promise.resolve()
 const bump = updates => (tallyChain = tallyChain.then(async () => {
   const keys = Object.keys(updates)
   const cur = await chrome.storage.local.get(keys)
   await chrome.storage.local.set(Object.fromEntries(keys.map(k => [k, (cur[k] ?? 0) + updates[k]])))
-}).catch(() => {}))
-
-const notPauseRule = i => !(i.rule.ruleId === PAUSE_RULE_ID && i.rule.rulesetId === chrome.declarativeNetRequest.DYNAMIC_RULESET_ID)
-
-// Pages keep pinging blocked trackers (YouTube's player: ~2 a second while playing), which would
-// make the totals mostly a measure of how long a tab stayed open. Each rule counts at most
-// PER_PAGE_CAP times per page. `seen` (session storage) holds the counts: tabId -> { navAt, rules }.
-const PER_PAGE_CAP = 25
-function countCapped(records, seen, navAtOf) {
-  let n = 0
-  for (const i of records) {
-    const navAt = navAtOf(i.tabId)
-    const page = i.timeStamp >= navAt ? navAt : -1 // -1: an earlier page in this tab
-    let s = seen[i.tabId]
-    if (!s || s.navAt !== page) s = seen[i.tabId] = { navAt: page, rules: {} }
-    const key = `${i.rule.rulesetId}#${i.rule.ruleId}`
-    if ((s.rules[key] = (s.rules[key] ?? 0) + 1) <= PER_PAGE_CAP) n++
-  }
-  return n
-}
-
-// Adds requests blocked since the last tally to the lifetime total. `fetched`: a getMatchedRules
-// result the caller already has that covers that period (the popup's), saving a lookup.
-// Runs one at a time, in turn with bump(), so nothing is counted twice.
-const tally = (fetched, since = Infinity) => (tallyChain = tallyChain.then(async () => {
-  const now = Date.now()
-  const { tallyFrom = now, lifetimeAds = 0 } = await chrome.storage.local.get(['tallyFrom', 'lifetimeAds'])
-  const m = fetched && since <= tallyFrom ? fetched
-    : await chrome.declarativeNetRequest.getMatchedRules({ minTimeStamp: tallyFrom }).catch(() => null)
-  if (!m) return // over the lookup quota: the next run picks these up
-  const fresh = m.rulesMatchedInfo.filter(i => i.timeStamp >= tallyFrom && i.timeStamp < now && notPauseRule(i))
-  const session = await chrome.storage.session.get(null)
-  const seen = session.seen ?? {}
-  const n = countCapped(fresh, seen, tabId => session[`nav${tabId}`] ?? 0)
-  await chrome.storage.session.set({ seen })
-  await chrome.storage.local.set({ tallyFrom: now, lifetimeAds: lifetimeAds + n })
 }).catch(() => {}))
 
 // ---------- filter list auto-update ----------
@@ -184,7 +185,6 @@ async function useBundledLists() {
 }
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === TALLY_ALARM) return void tally()
   if (alarm.name !== UPDATE_ALARM && alarm.name !== `${UPDATE_ALARM}-retry`) return
   updateLists().catch(err => {
     console.warn('filter list update failed:', err.message)
@@ -282,7 +282,7 @@ chrome.webNavigation.onErrorOccurred.addListener(d => {
 })
 
 chrome.tabs.onRemoved.addListener(tabId => {
-  chrome.storage.session.get('seen').then(({ seen }) => { if (seen?.[tabId]) { delete seen[tabId]; chrome.storage.session.set({ seen }) } })
+  loadPages().then(() => { pages.delete(tabId); saveSoon() })
   opened.delete(tabId)
   pageReports.delete(tabId)
   chrome.storage.session.remove(`n${tabId}`)
@@ -312,7 +312,7 @@ function closePopup(tabId, o, url) {
 chrome.webNavigation.onCommitted.addListener(async d => {
   if (d.frameId !== 0) return
   chrome.storage.session.remove(`n${d.tabId}`)
-  chrome.storage.session.set({ [`nav${d.tabId}`]: d.timeStamp }) // "blocked on this page" counts from here
+  newPage(d.tabId, d.timeStamp) // "blocked on this page" counts from here
   if (opened.has(d.tabId) || !d.transitionQualifiers.includes('client_redirect')) return
   if (await popupBlocked(d.url, '')) {
     chrome.tabs.goBack(d.tabId).catch(() => {})
@@ -369,20 +369,16 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       (async () => {
         const site = siteOf(hostOf(msg.url))
         const { pausedAds, pausedGuard } = await settings()
-        const key = `n${msg.tabId}`, navKey = `nav${msg.tabId}`
-        // One lookup covers both this page and the lifetime total (Chrome allows 20 per 10 minutes).
-        const { tallyFrom = Date.now() } = await chrome.storage.local.get('tallyFrom')
-        const navAt = (await chrome.storage.session.get(navKey))[navKey] ?? 0
-        const since = Math.min(tallyFrom, navAt)
-        const m = await chrome.declarativeNetRequest.getMatchedRules({ minTimeStamp: since }).catch(() => null)
-        await tally(m, since)
+        const key = `n${msg.tabId}`
+        await loadPages()
+        await tallyChain
         reply({
           site,
           ads: !pausedAds.includes(site),
           guard: !pausedGuard.includes(site),
-          adsBlocked: m ? countCapped(m.rulesMatchedInfo.filter(i => i.tabId === msg.tabId && i.timeStamp >= navAt && notPauseRule(i)), {}, () => navAt) : 0,
+          adsBlocked: pages.get(msg.tabId)?.keys.size ?? 0,
           listsCheckedAt: (await chrome.storage.local.get('listsCheckedAt')).listsCheckedAt ?? null,
-          lifetime: await chrome.storage.local.get(['lifetimeAds', 'lifetimeRedirects']).then(l => (l.lifetimeAds ?? 0) + (l.lifetimeRedirects ?? 0)),
+          lifetime: await chrome.storage.local.get(['lifetimeAds', 'lifetimeRedirects']).then(l => (l.lifetimeAds ?? 0) + (l.lifetimeRedirects ?? 0) + pendingAds),
           redirectsBlocked: (await chrome.storage.session.get(key))[key] ?? 0,
         })
       })()

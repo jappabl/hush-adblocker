@@ -441,9 +441,11 @@ await test('toolbar popup renders', async tab => {
   await sleep(300)
   const text = await tab.evaluate(() => document.body.innerText)
   await tab.screenshot({ path: path.join(OUT, 'popup.png'), clip: await tab.$eval('body', b => { const r = b.getBoundingClientRect(); return { x: 0, y: 0, width: r.width, height: r.height } }) })
+  const badge = await sw.evaluate(id => chrome.action.getBadgeText({ tabId: id }), siteTabId)
   await site.close()
   assert(text.includes('news.test') && text.includes('2 requests blocked') && text.includes('Filter lists updated'), text)
   assert(/[\d,]+ blocked since install/.test(text), `no lifetime total: ${text}`)
+  assert(badge === '2', `toolbar badge shows "${badge}", popup says 2`)
 })
 
 await browser.close()

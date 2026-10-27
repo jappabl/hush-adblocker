@@ -5,7 +5,7 @@ Hush blocks ads, trackers, malware sites and unwanted redirects/pop-up tabs on w
 
 ## Permission justifications
 - **declarativeNetRequest**: blocks ad, tracker and malware requests using filter-list rules.
-- **declarativeNetRequestFeedback**: shows how many requests were blocked on the current page in the toolbar popup.
+- **webRequest**: observes (never blocks or changes) which requests were blocked in each tab, to show the per-page count on the toolbar badge and in the popup.
 - **scripting**: registers the page scripts that hide ad slots, stop click-hijacking redirects/pop-ups and remove YouTube ads, and inserts site-specific hiding CSS.
 - **webNavigation**: detects new tabs a page opens and closes them when they go to known pop-under ad networks; detects when a page redirects itself to such networks.
 - **storage**: saves per-site on/off settings, the updated filter lists, and per-tab blocked counts, locally.

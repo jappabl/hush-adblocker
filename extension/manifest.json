@@ -2,15 +2,15 @@
   "manifest_version": 3,
   "name": "Hush",
   "description": "Blocks ads, trackers, malware sites and unwanted redirects.",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "minimum_chrome_version": "111",
   "permissions": [
     "declarativeNetRequest",
-    "declarativeNetRequestFeedback",
     "scripting",
     "webNavigation",
     "storage",
-    "alarms"
+    "alarms",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"
